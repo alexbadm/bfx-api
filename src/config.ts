@@ -1,0 +1,4 @@
+export default {
+  "BitfinexAPIVersions": [ 2 ],
+  "BitfinexDefaultAPIUrl": "wss://api.bitfinex.com/ws/2"
+}

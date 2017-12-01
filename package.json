@@ -1,0 +1,20 @@
+{
+  "name": "bfx-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "Bitfinex",
+    "api",
+    "cryptocurrency",
+    "trading"
+  ],
+  "author": "Alex B. <eto.ya@list.ru>",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^2.6.2"
+  }
+}
