@@ -1,24 +1,22 @@
-interface IAction {
-  (): void
-}
+export type IAction = () => void;
 
 export default class ActionsStack {
-  stack: Array<IAction>
+  private stack: IAction[];
 
-  constructor () {
-    this.reject()
+  constructor() {
+    this.reject();
   }
 
-  add (action: IAction) {
-    return this.stack.push(action)
+  public add(action: IAction) {
+    return this.stack.push(action);
   }
 
-  fire () {
-    this.stack.forEach(action => action())
-    this.reject()
+  public fire() {
+    this.stack.forEach((action) => action());
+    this.reject();
   }
 
-  reject () {
-    this.stack = []
+  public reject() {
+    this.stack = [];
   }
 }

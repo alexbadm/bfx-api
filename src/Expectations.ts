@@ -1,51 +1,38 @@
-const ef = () => {}
-
-interface matchFunc {
-  (msg: Object): boolean
-}
-
-interface processFunc {
-  (msg: Object): void
-}
+export type matchFunc = (msg: any) => boolean;
+export type processFunc = (msg: any) => void;
 
 class Expectation {
-  match: matchFunc
-  process: processFunc
-
-  constructor (match: matchFunc, process: processFunc) {
-    this.match = match
-    this.process = typeof process === 'function' ? process : ef
-  }
+  constructor(public match: matchFunc, public process: processFunc) {}
 }
 
-class Processor {
-  process: processFunc
-  constructor (p: (p: processFunc) => void) {
-    this.process = p
-  }
+function Processor(p: processFunc) {
+  return { process: p };
 }
 
+// tslint:disable-next-line:max-classes-per-file
 class Expectations {
-  expectations: Array<Expectation>
+  private expectations: Expectation[];
 
-  constructor () {
-    this.expectations = []
+  constructor() {
+    this.expectations = [];
   }
 
-  add (match: matchFunc) {
-    return new Processor((p: processFunc) => this.expectations.push(new Expectation(match, p)))
+  public add(match: matchFunc) {
+    return {
+      process: (p: processFunc) => this.expectations.push(new Expectation(match, p)),
+    };
   }
 
-  exec (msg: Object) {
-    const expectation = this.expectations.find((exp: Expectation) => exp.match(msg))
+  public exec(msg: any) {
+    const expectation = this.expectations.find((exp) => exp.match(msg));
     if (!expectation) {
-      return false
+      return false;
     }
 
-    expectation.process(msg)
-    this.expectations = this.expectations.filter(exp => exp !== expectation)
-    return true
+    this.expectations = this.expectations.filter((exp) => exp !== expectation);
+    expectation.process(msg);
+    return true;
   }
 }
 
-export default Expectations
+export default Expectations;

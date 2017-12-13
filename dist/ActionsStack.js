@@ -1,5 +1,3 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 var ActionsStack = /** @class */ (function () {
     function ActionsStack() {
         this.reject();
@@ -16,5 +14,5 @@ var ActionsStack = /** @class */ (function () {
     };
     return ActionsStack;
 }());
-exports.default = ActionsStack;
+export default ActionsStack;
 //# sourceMappingURL=ActionsStack.js.map

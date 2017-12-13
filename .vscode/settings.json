@@ -1,4 +1,6 @@
 {
   "typescript.tsdk": "node_modules/typescript/lib",
+  "javascript.validate.enable": true,
+  "javascript.format.enable": true,
   "standard.enable": false
 }
