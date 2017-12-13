@@ -1,4 +1,4 @@
-import * as config from "../config.json";
+import config from "../config.json";
 import ActionsStack from "./ActionsStack";
 import Expectations from "./Expectations";
 
