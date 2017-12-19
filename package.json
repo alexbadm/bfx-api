@@ -4,6 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -15,6 +16,7 @@
   "author": "Alex B. <eto.ya@list.ru>",
   "license": "ISC",
   "devDependencies": {
+    "@types/node": "^8.5.1",
     "typescript": "^2.6.2"
   }
 }

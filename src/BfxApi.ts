@@ -1,17 +1,22 @@
-import config from "../config.json";
+import * as config from "../config.json";
 import ActionsStack from "./ActionsStack";
 import Expectations from "./Expectations";
 
 const allowedVersions = config.BitfinexAPIVersions;
-const bfxApi = config.BitfinexDefaultAPIUrl;
+const bfxAPI = config.BitfinexDefaultAPIUrl;
 
 export type wsOnOpen = (this: WebSocket, ev: Event) => any;
 export interface IBfxApiParameters {
-  apiKey: string;
-  apiSecret: string;
-  url: string;
+  apiKey?: string;
+  apiSecret?: string;
   logger: Console;
+  url: string;
 }
+
+const defaultBfxApiParameters = {
+  logger: console,
+  url: bfxAPI,
+};
 
 type voidFunction = (...p: any[]) => void;
 
@@ -39,6 +44,7 @@ class BfxApi {
   private log: voidFunction;
   private debug: voidFunction;
   private error: voidFunction;
+  private logger: Console;
 
   private paused: boolean;
   private resumeStack: ActionsStack;
@@ -48,15 +54,16 @@ class BfxApi {
   private subscribed: ISubscribeEvent[];
   private ws: WebSocket;
 
-  constructor(params: IBfxApiParameters) {
-    this.apiKey = params && params.apiKey;
-    this.apiSecret = params && params.apiSecret;
-    this.url = (params && params.url) || bfxApi;
+  constructor(params: IBfxApiParameters = defaultBfxApiParameters) {
+    params = { ...defaultBfxApiParameters, ...params };
+    this.apiKey = params.apiKey;
+    this.apiSecret = params.apiSecret;
+    this.url = params.url;
 
-    const logger = (params && params.logger) || window.console;
-    this.log = logger.log || window.console.log;
-    this.debug = logger.debug || this.log;
-    this.error = logger.error || this.log;
+    this.logger = params.logger;
+    this.log = this.logger.log;
+    this.debug = this.logger.debug || this.log;
+    this.error = this.logger.error || this.log;
 
     this.paused = false;
     this.resumeStack = new ActionsStack();

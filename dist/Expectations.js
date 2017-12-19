@@ -1,3 +1,5 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 var Expectation = /** @class */ (function () {
     function Expectation(match, process) {
         this.match = match;
@@ -30,5 +32,5 @@ var Expectations = /** @class */ (function () {
     };
     return Expectations;
 }());
-export default Expectations;
+exports.default = Expectations;
 //# sourceMappingURL=Expectations.js.map

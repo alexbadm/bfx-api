@@ -1,3 +1,4 @@
+"use strict";
 var __assign = (this && this.__assign) || Object.assign || function(t) {
     for (var s, i = 1, n = arguments.length; i < n; i++) {
         s = arguments[i];
@@ -6,24 +7,31 @@ var __assign = (this && this.__assign) || Object.assign || function(t) {
     }
     return t;
 };
-import config from "../config.json";
-import ActionsStack from "./ActionsStack";
-import Expectations from "./Expectations";
+Object.defineProperty(exports, "__esModule", { value: true });
+var config = require("../config.json");
+var ActionsStack_1 = require("./ActionsStack");
+var Expectations_1 = require("./Expectations");
 var allowedVersions = config.BitfinexAPIVersions;
-var bfxApi = config.BitfinexDefaultAPIUrl;
+var bfxAPI = config.BitfinexDefaultAPIUrl;
+var defaultBfxApiParameters = {
+    logger: console,
+    url: bfxAPI,
+};
 var BfxApi = /** @class */ (function () {
     function BfxApi(params) {
-        this.apiKey = params && params.apiKey;
-        this.apiSecret = params && params.apiSecret;
-        this.url = (params && params.url) || bfxApi;
-        var logger = (params && params.logger) || window.console;
-        this.log = logger.log || window.console.log;
-        this.debug = logger.debug || this.log;
-        this.error = logger.error || this.log;
+        if (params === void 0) { params = defaultBfxApiParameters; }
+        params = __assign({}, defaultBfxApiParameters, params);
+        this.apiKey = params.apiKey;
+        this.apiSecret = params.apiSecret;
+        this.url = params.url;
+        this.logger = params.logger;
+        this.log = this.logger.log;
+        this.debug = this.logger.debug || this.log;
+        this.error = this.logger.error || this.log;
         this.paused = false;
-        this.resumeStack = new ActionsStack();
+        this.resumeStack = new ActionsStack_1.default();
         this.pingCounter = 0;
-        this.expectations = new Expectations();
+        this.expectations = new Expectations_1.default();
         this.subscribed = [];
         this.auth = this.auth.bind(this);
         this.close = this.close.bind(this);
@@ -180,5 +188,5 @@ var BfxApi = /** @class */ (function () {
     };
     return BfxApi;
 }());
-export default BfxApi;
+exports.default = BfxApi;
 //# sourceMappingURL=BfxApi.js.map

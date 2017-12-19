@@ -1,9 +1,9 @@
 export declare type wsOnOpen = (this: WebSocket, ev: Event) => any;
 export interface IBfxApiParameters {
-    apiKey: string;
-    apiSecret: string;
-    url: string;
+    apiKey?: string;
+    apiSecret?: string;
     logger: Console;
+    url: string;
 }
 declare class BfxApi {
     private apiKey;
@@ -12,13 +12,14 @@ declare class BfxApi {
     private log;
     private debug;
     private error;
+    private logger;
     private paused;
     private resumeStack;
     private pingCounter;
     private expectations;
     private subscribed;
     private ws;
-    constructor(params: IBfxApiParameters);
+    constructor(params?: IBfxApiParameters);
     connect(): void;
     close(): void;
     onopen: wsOnOpen;

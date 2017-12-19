@@ -10,7 +10,7 @@
     "noImplicitThis": true,
     "suppressImplicitAnyIndexErrors": true,
     "moduleResolution": "node",
-    "module": "esnext",
+    "module": "CommonJS",
     "rootDir": "src",
     "target": "es5",
     "outDir": "./dist",
