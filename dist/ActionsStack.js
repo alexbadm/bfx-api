@@ -8,8 +8,9 @@ var ActionsStack = /** @class */ (function () {
         return this.stack.push(action);
     };
     ActionsStack.prototype.fire = function () {
-        this.stack.forEach(function (action) { return action(); });
+        var stack = this.stack;
         this.reject();
+        stack.forEach(function (action) { return action(); });
     };
     ActionsStack.prototype.reject = function () {
         this.stack = [];
