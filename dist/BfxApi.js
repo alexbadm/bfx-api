@@ -14,6 +14,17 @@ var ActionsStack_1 = require("./ActionsStack");
 var Expectations_1 = require("./Expectations");
 var allowedVersions = config.BitfinexAPIVersions;
 var bfxAPI = config.BitfinexDefaultAPIUrl;
+function MatchHeartbeat(chanId) {
+    return function (msg) { return msg[0] === chanId && msg[1] === 'hb'; };
+}
+function MatchSnapshot(chanId) {
+    return function (msg) { return msg[0] === chanId && msg[1] !== 'hb'; };
+}
+function mustBeFunction(callback) {
+    if (typeof callback !== 'function') {
+        throw new TypeError('BfxApi.subscribe error: callback must be a function');
+    }
+}
 var defaultBfxApiParameters = {
     logger: console,
     url: bfxAPI,
@@ -34,7 +45,7 @@ var BfxApi = /** @class */ (function () {
         this.resumeStack = new ActionsStack_1.default();
         this.pingCounter = 0;
         this.expectations = new Expectations_1.default();
-        this.subscribed = [];
+        // this.subscribed = [];
         this.auth = this.auth.bind(this);
         this.close = this.close.bind(this);
         this.connect = this.connect.bind(this);
@@ -55,15 +66,11 @@ var BfxApi = /** @class */ (function () {
         this.ws = new this.WebSocket(this.url);
         this.ws.onmessage = this.handleMessage.bind(this);
         this.ws.onopen = this.resume.bind(this);
-        // this.resume();
     };
     BfxApi.prototype.close = function () {
         this.log('closing socket');
         this.ws.close();
     };
-    // set onopen(openFunc: wsOnOpen) {
-    //   this.ws.onopen = openFunc;
-    // }
     BfxApi.prototype.auth = function () {
         if (this.paused) {
             this.resumeStack.add(this.auth);
@@ -72,37 +79,26 @@ var BfxApi = /** @class */ (function () {
         this.log('auth not implemented');
     };
     BfxApi.prototype.subscribeTicker = function (pair, callback) {
-        var _this = this;
-        var debug = this.debug;
-        if (typeof callback !== 'function') {
-            throw new TypeError('BfxApi.subscribeTicker error: callback must be a function');
-        }
-        this.subscribe('ticker', pair, { symbol: 't' + pair })
-            .then(function (e) {
-            debug('subscribed', e.chanId);
-            _this.expectations.whenever(function (msg) { return msg[0] === e.chanId && Array.isArray(msg[1]); }, function (msg) { return callback(msg[1]); });
-            _this.expectations.whenever(function (msg) { return msg[0] === e.chanId && msg[1] === 'hb'; }, function (msg) { return debug('Heartbeating', msg[0]); });
-            return e;
-        });
+        return this.subscribe('ticker', pair, { symbol: 't' + pair }, callback);
     };
-    BfxApi.prototype.subscribeFTicker = function (pair) {
-        this.subscribe('fticker', pair, { symbol: 'f' + pair });
+    BfxApi.prototype.subscribeFTicker = function (pair, callback) {
+        return this.subscribe('fticker', pair, { symbol: 'f' + pair }, callback);
     };
-    BfxApi.prototype.subscribeTrades = function (pair) {
-        this.subscribe('trades', pair, { symbol: 't' + pair });
+    BfxApi.prototype.subscribeTrades = function (pair, callback) {
+        return this.subscribe('trades', pair, { symbol: 't' + pair }, callback);
     };
-    BfxApi.prototype.subscribeFTrades = function (pair) {
-        this.subscribe('trades', pair, { symbol: 'f' + pair });
+    BfxApi.prototype.subscribeFTrades = function (pair, callback) {
+        return this.subscribe('trades', pair, { symbol: 'f' + pair }, callback);
     };
-    BfxApi.prototype.subscribeBooks = function (pair) {
-        this.subscribe('book', pair, { symbol: 't' + pair });
+    BfxApi.prototype.subscribeBooks = function (pair, callback) {
+        return this.subscribe('book', pair, { symbol: 't' + pair }, callback);
     };
-    BfxApi.prototype.subscribeRawBooks = function (pair) {
-        this.subscribe('book', pair, { symbol: 't' + pair, prec: 'R0' });
+    BfxApi.prototype.subscribeRawBooks = function (pair, callback) {
+        return this.subscribe('book', pair, { symbol: 't' + pair, prec: 'R0' }, callback);
     };
-    BfxApi.prototype.subscribeCandles = function (pair, timeFrame) {
+    BfxApi.prototype.subscribeCandles = function (pair, callback, timeFrame) {
         if (timeFrame === void 0) { timeFrame = '1m'; }
-        this.subscribe('candles', pair, { symbol: '', key: "trade:" + timeFrame + ":t" + pair });
+        return this.subscribe('candles', pair, { symbol: '', key: "trade:" + timeFrame + ":t" + pair }, callback);
     };
     BfxApi.prototype.ping = function () {
         var _this = this;
@@ -117,6 +113,14 @@ var BfxApi = /** @class */ (function () {
         });
         this.send(JSON.stringify({ cid: cid, event: 'ping' }));
     };
+    BfxApi.prototype.unsubscribe = function (chanId) {
+        var _this = this;
+        var event = 'unsubscribe';
+        this.send({ event: event, chanId: chanId });
+        return new Promise(function (resolve) {
+            _this.expectations.once(function (msg) { return msg.event === 'unsubscribed' && msg.chanId === chanId; }, function (msg) { return resolve(msg); });
+        });
+    };
     BfxApi.prototype.handleMessage = function (rawMsg) {
         var msg = JSON.parse(rawMsg.data);
         if (this.expectations.exec(msg)) {
@@ -127,12 +131,13 @@ var BfxApi = /** @class */ (function () {
                 this.processMsgInfo(msg);
                 break;
             case 'subscribed':
-                this.onSubscribe(msg);
+                // this.onSubscribe(msg);
                 break;
             case 'unsubscribed':
-                this.onUnsubscribe(msg);
+                // this.onUnsubscribe(msg);
                 break;
             default:
+                // TODO: keep unprocessed messages for future process
                 this.debug('unprocessed message', msg);
         }
     };
@@ -176,26 +181,24 @@ var BfxApi = /** @class */ (function () {
         }
         this.ws.send(data);
     };
-    BfxApi.prototype.subscribe = function (channel, pair, params) {
+    BfxApi.prototype.subscribe = function (channel, pair, params, callback) {
         var _this = this;
+        mustBeFunction(callback);
         var event = 'subscribe';
+        var debug = this.debug;
         this.send(__assign({ event: event, channel: channel }, params));
         return new Promise(function (resolve) {
             _this.expectations.once(function (msg) { return msg.event === 'subscribed' && msg.pair && msg.pair === pair; }, function (msg) { return resolve(msg); });
+        })
+            .then(function (e) {
+            debug('subscribed', e.chanId);
+            _this.expectations.whenever(MatchSnapshot(e.chanId), function (msg) { return callback(msg); });
+            _this.expectations.whenever(MatchHeartbeat(e.chanId), function (_a) {
+                var chanId = _a[0];
+                return debug('Heartbeating', { chanId: chanId });
+            });
+            return e;
         });
-    };
-    BfxApi.prototype.onSubscribe = function (data) {
-        this.subscribed.push(data);
-        this.debug('subscribed', this.subscribed);
-    };
-    BfxApi.prototype.unsubscribe = function (chanId) {
-        var event = 'unsubscribe';
-        this.send({ event: event, chanId: chanId });
-    };
-    BfxApi.prototype.onUnsubscribe = function (data) {
-        this.subscribed = this.subscribed.filter(function (subs) { return subs.chanId !== data.chanId; });
-        this.debug('unsubscribed');
-        this.debug('subscribed', this.subscribed);
     };
     return BfxApi;
 }());

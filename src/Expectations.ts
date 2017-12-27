@@ -1,8 +1,8 @@
-export type matchFunc = (msg: any) => boolean;
-export type processFunc = (msg: any) => void;
+export type MatchFunc = (msg: any) => boolean;
+export type ProcessFunc = (msg: any) => void;
 
 class Expectation {
-  constructor(public match: matchFunc, public process: processFunc) {}
+  constructor(public match: MatchFunc, public process: ProcessFunc) {}
 }
 
 // tslint:disable-next-line:max-classes-per-file
@@ -15,11 +15,11 @@ class Expectations {
     this.expectationsWhenever = [];
   }
 
-  public once(match: matchFunc, process: processFunc) {
+  public once(match: MatchFunc, process: ProcessFunc) {
     this.expectationsOnce.push(new Expectation(match, process));
   }
 
-  public whenever(match: matchFunc, process: processFunc) {
+  public whenever(match: MatchFunc, process: ProcessFunc) {
     this.expectationsWhenever.push(new Expectation(match, process));
   }
 
