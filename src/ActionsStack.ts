@@ -12,8 +12,9 @@ export default class ActionsStack {
   }
 
   public fire() {
-    this.stack.forEach((action) => action());
+    const stack = this.stack;
     this.reject();
+    stack.forEach((action) => action());
   }
 
   public reject() {
