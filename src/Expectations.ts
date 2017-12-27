@@ -5,32 +5,46 @@ class Expectation {
   constructor(public match: matchFunc, public process: processFunc) {}
 }
 
-function Processor(p: processFunc) {
-  return { process: p };
-}
-
 // tslint:disable-next-line:max-classes-per-file
 class Expectations {
-  private expectations: Expectation[];
+  private expectationsOnce: Expectation[];
+  private expectationsWhenever: Expectation[];
 
   constructor() {
-    this.expectations = [];
+    this.expectationsOnce = [];
+    this.expectationsWhenever = [];
   }
 
-  public add(match: matchFunc) {
-    return {
-      process: (p: processFunc) => this.expectations.push(new Expectation(match, p)),
-    };
+  public once(match: matchFunc, process: processFunc) {
+    this.expectationsOnce.push(new Expectation(match, process));
+  }
+
+  public whenever(match: matchFunc, process: processFunc) {
+    this.expectationsWhenever.push(new Expectation(match, process));
   }
 
   public exec(msg: any) {
-    const expectation = this.expectations.find((exp) => exp.match(msg));
+    return this.execOne(msg) || this.execWhenever(msg);
+  }
+
+  public execOne(msg: any) {
+    const expectation = this.expectationsOnce.find((exp) => exp.match(msg));
     if (!expectation) {
       return false;
     }
 
-    this.expectations = this.expectations.filter((exp) => exp !== expectation);
+    this.expectationsOnce = this.expectationsOnce.filter((exp) => exp !== expectation);
     expectation.process(msg);
+    return true;
+  }
+
+  public execWhenever(msg: any) {
+    const expIdx = this.expectationsWhenever.findIndex((exp) => exp.match(msg));
+    if (!~expIdx) {
+      return false;
+    }
+
+    this.expectationsWhenever[expIdx].process(msg);
     return true;
   }
 }

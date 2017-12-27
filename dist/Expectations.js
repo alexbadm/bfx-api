@@ -7,27 +7,36 @@ var Expectation = /** @class */ (function () {
     }
     return Expectation;
 }());
-function Processor(p) {
-    return { process: p };
-}
 // tslint:disable-next-line:max-classes-per-file
 var Expectations = /** @class */ (function () {
     function Expectations() {
-        this.expectations = [];
+        this.expectationsOnce = [];
+        this.expectationsWhenever = [];
     }
-    Expectations.prototype.add = function (match) {
-        var _this = this;
-        return {
-            process: function (p) { return _this.expectations.push(new Expectation(match, p)); },
-        };
+    Expectations.prototype.once = function (match, process) {
+        this.expectationsOnce.push(new Expectation(match, process));
+    };
+    Expectations.prototype.whenever = function (match, process) {
+        this.expectationsWhenever.push(new Expectation(match, process));
     };
     Expectations.prototype.exec = function (msg) {
-        var expectation = this.expectations.find(function (exp) { return exp.match(msg); });
+        return this.execOne(msg) || this.execWhenever(msg);
+    };
+    Expectations.prototype.execOne = function (msg) {
+        var expectation = this.expectationsOnce.find(function (exp) { return exp.match(msg); });
         if (!expectation) {
             return false;
         }
-        this.expectations = this.expectations.filter(function (exp) { return exp !== expectation; });
+        this.expectationsOnce = this.expectationsOnce.filter(function (exp) { return exp !== expectation; });
         expectation.process(msg);
+        return true;
+    };
+    Expectations.prototype.execWhenever = function (msg) {
+        var expIdx = this.expectationsWhenever.findIndex(function (exp) { return exp.match(msg); });
+        if (!~expIdx) {
+            return false;
+        }
+        this.expectationsWhenever[expIdx].process(msg);
         return true;
     };
     return Expectations;
