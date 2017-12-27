@@ -1,16 +1,18 @@
-import * as config from "../config.json";
-import ActionsStack from "./ActionsStack";
-import Expectations from "./Expectations";
+import * as WebSocket from 'ws';
+import * as config from '../config.json';
+import ActionsStack from './ActionsStack';
+import Expectations from './Expectations';
 
 const allowedVersions = config.BitfinexAPIVersions;
 const bfxAPI = config.BitfinexDefaultAPIUrl;
 
-export type wsOnOpen = (this: WebSocket, ev: Event) => any;
+export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
 export interface IBfxApiParameters {
   apiKey?: string;
   apiSecret?: string;
-  logger: Console;
-  url: string;
+  logger?: Console;
+  url?: string;
+  WebSocket?: typeof WebSocket;
 }
 
 const defaultBfxApiParameters = {
@@ -28,12 +30,18 @@ interface ISubscribeEvent {
   chanId: number;
   channel: string;
   event: string;
-  pair: string;
-  symbol: string;
+  pair?: string;
+  symbol?: string;
 }
 
 interface IUnsubscribeEvent {
   chanId: number;
+}
+
+interface ISubscribeParams {
+  symbol: string;
+  prec?: string;
+  key?: string;
 }
 
 class BfxApi {
@@ -53,19 +61,21 @@ class BfxApi {
   private expectations: Expectations;
   private subscribed: ISubscribeEvent[];
   private ws: WebSocket;
+  private WebSocket: typeof WebSocket;
 
   constructor(params: IBfxApiParameters = defaultBfxApiParameters) {
     params = { ...defaultBfxApiParameters, ...params };
     this.apiKey = params.apiKey;
     this.apiSecret = params.apiSecret;
     this.url = params.url;
+    this.WebSocket = params.WebSocket || WebSocket;
 
     this.logger = params.logger;
     this.log = this.logger.log;
     this.debug = this.logger.debug || this.log;
     this.error = this.logger.error || this.log;
 
-    this.paused = false;
+    this.paused = true;
     this.resumeStack = new ActionsStack();
     this.pingCounter = 0;
 
@@ -80,63 +90,83 @@ class BfxApi {
   }
 
   public connect() {
-    this.debug("connect");
-    this.expectations.add((msg) => msg.event === "info" && msg.version).process((msg) => {
-      this.debug("msg.version", msg.version);
-      if (allowedVersions.indexOf(msg.version) === -1) {
-        this.error("unexpected version", msg.version);
-        this.error("closing socket");
-        this.ws.close();
-      }
-    });
+    this.debug('connect');
+    this.expectations.once(
+      (msg) => msg.event === 'info' && msg.version,
+      (msg) => {
+        this.debug('msg.version', msg.version);
+        if (allowedVersions.indexOf(msg.version) === -1) {
+          this.error('unexpected version', msg.version);
+          this.error('closing socket');
+          this.ws.close();
+        }
+      },
+    );
 
-    this.ws = new WebSocket(this.url);
+    this.ws = new this.WebSocket(this.url);
     this.ws.onmessage = this.handleMessage.bind(this);
+    this.ws.onopen = this.resume.bind(this);
+    // this.resume();
   }
 
   public close() {
-    this.log("closing socket");
+    this.log('closing socket');
     this.ws.close();
   }
 
-  set onopen(openFunc: wsOnOpen) {
-    this.ws.onopen = openFunc;
-  }
+  // set onopen(openFunc: wsOnOpen) {
+  //   this.ws.onopen = openFunc;
+  // }
 
   public auth() {
     if (this.paused) {
       this.resumeStack.add(this.auth);
       return;
     }
-    this.log("auth not implemented");
+    this.log('auth not implemented');
   }
 
-  public subscribeTicker(pair: string) {
-    this.subscribe("ticker", { symbol: "t" + pair });
+  public subscribeTicker(pair: string, callback: (msg: any) => void) {
+    const debug = this.debug;
+    if (typeof callback !== 'function') {
+      throw new TypeError('BfxApi.subscribeTicker error: callback must be a function');
+    }
+
+    this.subscribe('ticker', pair, { symbol: 't' + pair })
+    .then((e: ISubscribeEvent) => {
+      debug('subscribed', e.chanId);
+      this.expectations.whenever(
+        (msg) => msg[0] === e.chanId && Array.isArray(msg[1]),
+        (msg) => callback(msg[1]));
+      this.expectations.whenever(
+        (msg) => msg[0] === e.chanId && msg[1] === 'hb',
+        (msg) => debug('Heartbeating', msg[0]));
+      return e;
+    });
   }
 
   public subscribeFTicker(pair: string) {
-    this.subscribe("fticker", { symbol: "f" + pair });
+    this.subscribe('fticker', pair, { symbol: 'f' + pair });
   }
 
   public subscribeTrades(pair: string) {
-    this.subscribe("trades", { symbol: "t" + pair });
+    this.subscribe('trades', pair, { symbol: 't' + pair });
   }
 
   public subscribeFTrades(pair: string) {
-    this.subscribe("trades", { symbol: "f" + pair });
+    this.subscribe('trades', pair, { symbol: 'f' + pair });
   }
 
   public subscribeBooks(pair: string) {
-    this.subscribe("book", { symbol: "t" + pair });
+    this.subscribe('book', pair, { symbol: 't' + pair });
   }
 
   public subscribeRawBooks(pair: string) {
-    this.subscribe("book", { symbol: "t" + pair, prec: "R0" });
+    this.subscribe('book', pair, { symbol: 't' + pair, prec: 'R0' });
   }
 
-  public subscribeCandles(pair: string, timeFrame = "1m") {
-    this.subscribe("candles", { key: `trade:${timeFrame}:t${pair}` });
+  public subscribeCandles(pair: string, timeFrame = '1m') {
+    this.subscribe('candles', pair, { symbol: '', key: `trade:${timeFrame}:t${pair}` });
   }
 
   public ping() {
@@ -145,10 +175,10 @@ class BfxApi {
       return;
     }
     const cid = ++this.pingCounter;
-    this.expectations.add((msg) => msg.event === "pong" && msg.cid === cid).process(({ ts }) => {
-      this.log("proper ping/pong, ts is", ts);
+    this.expectations.once((msg) => msg.event === 'pong' && msg.cid === cid, ({ ts }) => {
+      this.log('proper ping/pong, ts is', ts);
     });
-    this.send(JSON.stringify({ cid, event: "ping" }));
+    this.send(JSON.stringify({ cid, event: 'ping' }));
   }
 
   private handleMessage(rawMsg: MessageEvent) {
@@ -159,25 +189,25 @@ class BfxApi {
     }
 
     switch (msg.event) {
-      case "info":
+      case 'info':
         this.processMsgInfo(msg);
         break;
 
-      case "subscribed":
+      case 'subscribed':
         this.onSubscribe(msg);
         break;
 
-      case "unsubscribed":
+      case 'unsubscribed':
         this.onUnsubscribe(msg);
         break;
 
       default:
-        this.debug("unprocessed message", msg);
+        this.debug('unprocessed message', msg);
     }
   }
 
   private processMsgInfo(msg: IMsgInfo) {
-    this.debug("info message", msg);
+    this.debug('info message', msg);
 
     switch (msg.code) {
       case 20051:
@@ -190,61 +220,63 @@ class BfxApi {
         this.resume();
         break;
       default:
-        this.log("unknown info message code", msg.code);
+        this.log('unknown info message code', msg.code);
     }
   }
 
   private pause() {
-    this.debug("pause");
+    this.debug('pause');
     this.paused = true;
   }
 
   private resume() {
-    this.debug("resume");
+    this.debug('resume');
     this.paused = false;
     this.resumeStack.fire();
   }
 
   private restart() {
-    this.debug("restart");
+    this.debug('restart');
     this.close();
     this.connect();
   }
 
   private send(data: object | string) {
-    if (this.paused) {
+    if (this.paused || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.resumeStack.add(this.send.bind(this, data));
       return;
     }
-    if (this.ws.readyState !== WebSocket.OPEN) {
-      this.error("ws is not ready");
-      return;
-    }
-    if (typeof data !== "string") {
+    if (typeof data !== 'string') {
       data = JSON.stringify(data);
     }
     this.ws.send(data);
   }
 
-  private subscribe(channel: string, params: object) {
-    const event = "subscribe";
+  private subscribe(channel: string, pair: string, params: ISubscribeParams): Promise<ISubscribeEvent> {
+    const event = 'subscribe';
     this.send({ event, channel, ...params });
+    return new Promise((resolve) => {
+      this.expectations.once(
+        (msg) => msg.event === 'subscribed' && msg.pair && msg.pair === pair,
+        (msg) => resolve(msg),
+      );
+    });
   }
 
   private onSubscribe(data: ISubscribeEvent) {
     this.subscribed.push(data);
-    this.debug("subscribed", this.subscribed);
+    this.debug('subscribed', this.subscribed);
   }
 
-  private ubsubscribe(chanId: number) {
-    const event = "unsubscribe";
+  private unsubscribe(chanId: number) {
+    const event = 'unsubscribe';
     this.send({ event, chanId });
   }
 
   private onUnsubscribe(data: IUnsubscribeEvent) {
     this.subscribed = this.subscribed.filter((subs) => subs.chanId !== data.chanId);
-    this.debug("unsubscribed");
-    this.debug("subscribed", this.subscribed);
+    this.debug('unsubscribed');
+    this.debug('subscribed', this.subscribed);
   }
 }
 

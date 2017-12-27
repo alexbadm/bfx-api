@@ -1,9 +1,14 @@
-export declare type wsOnOpen = (this: WebSocket, ev: Event) => any;
+/// <reference types="ws" />
+import * as WebSocket from 'ws';
+export declare type wsOnOpen = (this: WebSocket, ev: {
+    target: WebSocket;
+} | Event) => any;
 export interface IBfxApiParameters {
     apiKey?: string;
     apiSecret?: string;
-    logger: Console;
-    url: string;
+    logger?: Console;
+    url?: string;
+    WebSocket?: typeof WebSocket;
 }
 declare class BfxApi {
     private apiKey;
@@ -19,12 +24,12 @@ declare class BfxApi {
     private expectations;
     private subscribed;
     private ws;
+    private WebSocket;
     constructor(params?: IBfxApiParameters);
     connect(): void;
     close(): void;
-    onopen: wsOnOpen;
     auth(): void;
-    subscribeTicker(pair: string): void;
+    subscribeTicker(pair: string, callback: (msg: any) => void): void;
     subscribeFTicker(pair: string): void;
     subscribeTrades(pair: string): void;
     subscribeFTrades(pair: string): void;
@@ -38,9 +43,9 @@ declare class BfxApi {
     private resume();
     private restart();
     private send(data);
-    private subscribe(channel, params);
+    private subscribe(channel, pair, params);
     private onSubscribe(data);
-    private ubsubscribe(chanId);
+    private unsubscribe(chanId);
     private onUnsubscribe(data);
 }
 export default BfxApi;

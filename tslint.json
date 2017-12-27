@@ -4,7 +4,10 @@
         "tslint:recommended"
     ],
     "jsRules": {},
-    "rules": {},
+    "rules": {
+        "quotemark": [true, "single", "jsx-double"],
+        "no-bitwise": false
+    },
     "rulesDirectory": [],
     "max-classes-per-file": [false]
 }
