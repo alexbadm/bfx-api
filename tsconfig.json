@@ -8,6 +8,8 @@
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
+    "noUnusedLocals": true,                /* Report errors on unused locals. */
+    "noUnusedParameters": true,            /* Report errors on unused parameters. */
     "suppressImplicitAnyIndexErrors": true,
     "moduleResolution": "node",
     "module": "CommonJS",

@@ -14,12 +14,6 @@ function MatchSnapshot(chanId: number): MatchFunc {
   return (msg: any[]) => msg[0] === chanId && msg[1] !== 'hb';
 }
 
-function mustBeFunction(callback: any) {
-  if (typeof callback !== 'function') {
-    throw new TypeError('BfxApi.subscribe error: callback must be a function');
-  }
-}
-
 export type SnapshotCallback = (msg: Array<number|string>) => void;
 
 export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
@@ -211,7 +205,6 @@ class BfxApi {
         break;
 
       default:
-        // TODO: keep unprocessed messages for future process
         this.debug('unprocessed message', msg);
     }
   }
@@ -265,34 +258,25 @@ class BfxApi {
   private subscribe(
     channel: string, pair: string, params: ISubscribeParams, callback: SnapshotCallback,
   ): Promise<ISubscribeEvent> {
-    mustBeFunction(callback);
-    const event = 'subscribe';
-    const debug = this.debug;
-    this.send({ event, channel, ...params });
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      if (typeof callback !== 'function') {
+        reject(new TypeError('BfxApi.subscribe error: callback must be a function'));
+        return;
+      }
+
+      const heartbeating = ([chanId]: [number]) => this.debug('Heartbeating', {chanId});
+
       this.expectations.once(
         (msg) => msg.event === 'subscribed' && msg.pair && msg.pair === pair,
-        (msg) => resolve(msg),
+        (e: ISubscribeEvent) => {
+          this.expectations.whenever(MatchSnapshot(e.chanId), (msg) => callback(msg));
+          this.expectations.whenever(MatchHeartbeat(e.chanId), heartbeating);
+          resolve(e);
+        },
       );
-    })
-    .then((e: ISubscribeEvent) => {
-      debug('subscribed', e.chanId);
-      this.expectations.whenever(MatchSnapshot(e.chanId), (msg) => callback(msg));
-      this.expectations.whenever(MatchHeartbeat(e.chanId), ([chanId]) => debug('Heartbeating', {chanId}));
-      return e;
+      this.send({ event: 'subscribe', channel, ...params });
     });
   }
-
-  // private onSubscribe(data: ISubscribeEvent) {
-  //   this.subscribed.push(data);
-  //   this.debug('subscribed', this.subscribed);
-  // }
-
-  // private onUnsubscribe(data: IUnsubscribeEvent) {
-  //   this.subscribed = this.subscribed.filter((subs) => subs.chanId !== data.chanId);
-  //   this.debug('unsubscribed');
-  //   this.debug('subscribed', this.subscribed);
-  // }
 }
 
 export default BfxApi;

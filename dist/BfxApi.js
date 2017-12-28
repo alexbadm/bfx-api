@@ -20,11 +20,6 @@ function MatchHeartbeat(chanId) {
 function MatchSnapshot(chanId) {
     return function (msg) { return msg[0] === chanId && msg[1] !== 'hb'; };
 }
-function mustBeFunction(callback) {
-    if (typeof callback !== 'function') {
-        throw new TypeError('BfxApi.subscribe error: callback must be a function');
-    }
-}
 var defaultBfxApiParameters = {
     logger: console,
     url: bfxAPI,
@@ -137,7 +132,6 @@ var BfxApi = /** @class */ (function () {
                 // this.onUnsubscribe(msg);
                 break;
             default:
-                // TODO: keep unprocessed messages for future process
                 this.debug('unprocessed message', msg);
         }
     };
@@ -183,21 +177,21 @@ var BfxApi = /** @class */ (function () {
     };
     BfxApi.prototype.subscribe = function (channel, pair, params, callback) {
         var _this = this;
-        mustBeFunction(callback);
-        var event = 'subscribe';
-        var debug = this.debug;
-        this.send(__assign({ event: event, channel: channel }, params));
-        return new Promise(function (resolve) {
-            _this.expectations.once(function (msg) { return msg.event === 'subscribed' && msg.pair && msg.pair === pair; }, function (msg) { return resolve(msg); });
-        })
-            .then(function (e) {
-            debug('subscribed', e.chanId);
-            _this.expectations.whenever(MatchSnapshot(e.chanId), function (msg) { return callback(msg); });
-            _this.expectations.whenever(MatchHeartbeat(e.chanId), function (_a) {
+        return new Promise(function (resolve, reject) {
+            if (typeof callback !== 'function') {
+                reject(new TypeError('BfxApi.subscribe error: callback must be a function'));
+                return;
+            }
+            var heartbeating = function (_a) {
                 var chanId = _a[0];
-                return debug('Heartbeating', { chanId: chanId });
+                return _this.debug('Heartbeating', { chanId: chanId });
+            };
+            _this.expectations.once(function (msg) { return msg.event === 'subscribed' && msg.pair && msg.pair === pair; }, function (e) {
+                _this.expectations.whenever(MatchSnapshot(e.chanId), function (msg) { return callback(msg); });
+                _this.expectations.whenever(MatchHeartbeat(e.chanId), heartbeating);
+                resolve(e);
             });
-            return e;
+            _this.send(__assign({ event: 'subscribe', channel: channel }, params));
         });
     };
     return BfxApi;
