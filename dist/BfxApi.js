@@ -40,7 +40,6 @@ var BfxApi = /** @class */ (function () {
         this.resumeStack = new ActionsStack_1.default();
         this.pingCounter = 0;
         this.expectations = new Expectations_1.default();
-        // this.subscribed = [];
         this.auth = this.auth.bind(this);
         this.close = this.close.bind(this);
         this.connect = this.connect.bind(this);
@@ -67,10 +66,6 @@ var BfxApi = /** @class */ (function () {
         this.ws.close();
     };
     BfxApi.prototype.auth = function () {
-        if (this.paused) {
-            this.resumeStack.add(this.auth);
-            return;
-        }
         this.log('auth not implemented');
     };
     BfxApi.prototype.subscribeTicker = function (pair, callback) {
@@ -97,16 +92,12 @@ var BfxApi = /** @class */ (function () {
     };
     BfxApi.prototype.ping = function () {
         var _this = this;
-        if (this.paused) {
-            this.resumeStack.add(this.ping);
-            return;
-        }
         var cid = ++this.pingCounter;
         this.expectations.once(function (msg) { return msg.event === 'pong' && msg.cid === cid; }, function (_a) {
             var ts = _a.ts;
             _this.log('proper ping/pong, ts is', ts);
         });
-        this.send(JSON.stringify({ cid: cid, event: 'ping' }));
+        this.send({ cid: cid, event: 'ping' });
     };
     BfxApi.prototype.unsubscribe = function (chanId) {
         var _this = this;
@@ -121,19 +112,11 @@ var BfxApi = /** @class */ (function () {
         if (this.expectations.exec(msg)) {
             return;
         }
-        switch (msg.event) {
-            case 'info':
-                this.processMsgInfo(msg);
-                break;
-            case 'subscribed':
-                // this.onSubscribe(msg);
-                break;
-            case 'unsubscribed':
-                // this.onUnsubscribe(msg);
-                break;
-            default:
-                this.debug('unprocessed message', msg);
+        if (msg.event === 'info') {
+            this.processMsgInfo(msg);
+            return;
         }
+        this.debug('unprocessed message', msg);
     };
     BfxApi.prototype.processMsgInfo = function (msg) {
         this.debug('info message', msg);

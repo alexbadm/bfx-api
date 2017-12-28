@@ -70,7 +70,6 @@ class BfxApi {
   private pingCounter: number;
 
   private expectations: Expectations;
-  private subscribed: ISubscribeEvent[];
   private ws: WebSocket;
   private WebSocket: typeof WebSocket;
 
@@ -91,7 +90,6 @@ class BfxApi {
     this.pingCounter = 0;
 
     this.expectations = new Expectations();
-    // this.subscribed = [];
 
     this.auth = this.auth.bind(this);
     this.close = this.close.bind(this);
@@ -125,10 +123,6 @@ class BfxApi {
   }
 
   public auth() {
-    if (this.paused) {
-      this.resumeStack.add(this.auth);
-      return;
-    }
     this.log('auth not implemented');
   }
 
@@ -161,15 +155,11 @@ class BfxApi {
   }
 
   public ping() {
-    if (this.paused) {
-      this.resumeStack.add(this.ping);
-      return;
-    }
     const cid = ++this.pingCounter;
     this.expectations.once((msg) => msg.event === 'pong' && msg.cid === cid, ({ ts }) => {
       this.log('proper ping/pong, ts is', ts);
     });
-    this.send(JSON.stringify({ cid, event: 'ping' }));
+    this.send({ cid, event: 'ping' });
   }
 
   public unsubscribe(chanId: number) {
@@ -191,22 +181,12 @@ class BfxApi {
       return;
     }
 
-    switch (msg.event) {
-      case 'info':
-        this.processMsgInfo(msg);
-        break;
-
-      case 'subscribed':
-        // this.onSubscribe(msg);
-        break;
-
-      case 'unsubscribed':
-        // this.onUnsubscribe(msg);
-        break;
-
-      default:
-        this.debug('unprocessed message', msg);
+    if (msg.event === 'info') {
+      this.processMsgInfo(msg);
+      return;
     }
+
+    this.debug('unprocessed message', msg);
   }
 
   private processMsgInfo(msg: IMsgInfo) {

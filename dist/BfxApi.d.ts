@@ -34,7 +34,6 @@ declare class BfxApi {
     private resumeStack;
     private pingCounter;
     private expectations;
-    private subscribed;
     private ws;
     private WebSocket;
     constructor(params?: IBfxApiParameters);
