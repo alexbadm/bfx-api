@@ -17,8 +17,12 @@
   "author": "Alex B. <eto.ya@list.ru>",
   "license": "ISC",
   "devDependencies": {
+    "@types/crypto-js": "^3.1.38",
     "@types/node": "^8.5.1",
     "@types/ws": "^3.2.1",
     "typescript": "^2.6.2"
+  },
+  "dependencies": {
+    "crypto-js": "^3.1.9-1"
   }
 }

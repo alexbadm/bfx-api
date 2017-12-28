@@ -1,3 +1,4 @@
+import * as crypto from 'crypto-js';
 import * as WebSocket from 'ws';
 import * as config from '../config.json';
 import ActionsStack from './ActionsStack';
@@ -6,26 +7,32 @@ import Expectations, { MatchFunc } from './Expectations';
 const allowedVersions = config.BitfinexAPIVersions;
 const bfxAPI = config.BitfinexDefaultAPIUrl;
 
-function MatchHeartbeat(chanId: number): MatchFunc {
-  return (msg: any[]) => msg[0] === chanId && msg[1] === 'hb';
+// function MatchHeartbeat(chanId: number): MatchFunc {
+//   return (msg: any[]) => msg[0] === chanId && msg[1] === 'hb';
+// }
+
+// function MatchSnapshot(chanId: number): MatchFunc {
+//   return (msg: any[]) => msg[0] === chanId && msg[1] !== 'hb';
+// }
+
+function MatchChannel(chanId: number): MatchFunc {
+  return (msg: any[]) => msg[0] === chanId;
 }
 
-function MatchSnapshot(chanId: number): MatchFunc {
-  return (msg: any[]) => msg[0] === chanId && msg[1] !== 'hb';
+function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCallback) {
+  return (msg: any[]) => msg[1] === 'hb' ? hbCb(msg) : snapCb(msg);
 }
 
 export type SnapshotCallback = (msg: Array<number|string>) => void;
 
 export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
 export interface IBfxApiParameters {
-  apiKey?: string;
-  apiSecret?: string;
   logger?: Console;
   url?: string;
   WebSocket?: typeof WebSocket;
 }
 
-const defaultBfxApiParameters = {
+const defaultBfxApiParameters: IBfxApiParameters = {
   logger: console,
   url: bfxAPI,
 };
@@ -55,9 +62,16 @@ interface ISubscribeParams {
   key?: string;
 }
 
+export interface IAuthEvent {
+  event: 'auth';
+  status: 'OK' | 'FAIL';
+  chanId: 0;
+  userId: number;
+  caps: string;
+  code: number;
+}
+
 class BfxApi {
-  private apiKey: string;
-  private apiSecret: string;
   private url: string;
 
   private log: voidFunction;
@@ -75,12 +89,10 @@ class BfxApi {
 
   constructor(params: IBfxApiParameters = defaultBfxApiParameters) {
     params = { ...defaultBfxApiParameters, ...params };
-    this.apiKey = params.apiKey;
-    this.apiSecret = params.apiSecret;
     this.url = params.url;
     this.WebSocket = params.WebSocket || WebSocket;
-
     this.logger = params.logger;
+
     this.log = this.logger.log;
     this.debug = this.logger.debug || this.log;
     this.error = this.logger.error || this.log;
@@ -122,36 +134,70 @@ class BfxApi {
     this.ws.close();
   }
 
-  public auth() {
-    this.log('auth not implemented');
+  public auth(apiKey: string, apiSecret: string, callback: SnapshotCallback) {
+    const authNonce = Date.now() * 1000;
+    const authPayload = 'AUTH' + authNonce;
+    const authSig = crypto
+      .HmacSHA384(authPayload, apiSecret)
+      .toString(crypto.enc.Hex);
+
+    const payload = {
+      apiKey,
+      authNonce,
+      authPayload,
+      authSig,
+      event: 'auth',
+    };
+
+    const heartbeating = () => this.debug('Heartbeating auth channel');
+
+    return new Promise((resolve, reject) => {
+      if (typeof callback !== 'function') {
+        reject(new TypeError('BfxApi.auth error: callback must be a function'));
+        return;
+      }
+      this.expectations.once(
+        (msg) => msg.event === 'auth' && msg.chanId === 0,
+        (event: IAuthEvent) => {
+          if (event.status === 'OK') {
+            this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback, heartbeating));
+            resolve(event);
+          } else {
+            reject(event);
+          }
+        },
+      );
+
+      this.send(payload);
+    });
   }
 
   public subscribeTicker(pair: string, callback: SnapshotCallback) {
-    return this.subscribe('ticker', pair, { symbol: 't' + pair }, callback);
+    return this.subscribe('ticker', { symbol: 't' + pair }, callback);
   }
 
   public subscribeFTicker(pair: string, callback: SnapshotCallback) {
-    return this.subscribe('fticker', pair, { symbol: 'f' + pair }, callback);
+    return this.subscribe('fticker', { symbol: 'f' + pair }, callback);
   }
 
   public subscribeTrades(pair: string, callback: SnapshotCallback) {
-    return this.subscribe('trades', pair, { symbol: 't' + pair }, callback);
+    return this.subscribe('trades', { symbol: 't' + pair }, callback);
   }
 
   public subscribeFTrades(pair: string, callback: SnapshotCallback) {
-    return this.subscribe('trades', pair, { symbol: 'f' + pair }, callback);
+    return this.subscribe('trades', { symbol: 'f' + pair }, callback);
   }
 
   public subscribeBooks(pair: string, callback: SnapshotCallback) {
-    return this.subscribe('book', pair, { symbol: 't' + pair }, callback);
+    return this.subscribe('book', { symbol: 't' + pair }, callback);
   }
 
   public subscribeRawBooks(pair: string, callback: SnapshotCallback) {
-    return this.subscribe('book', pair, { symbol: 't' + pair, prec: 'R0' }, callback);
+    return this.subscribe('book', { symbol: 't' + pair, prec: 'R0' }, callback);
   }
 
   public subscribeCandles(pair: string, callback: SnapshotCallback, timeFrame = '1m') {
-    return this.subscribe('candles', pair, { symbol: '', key: `trade:${timeFrame}:t${pair}` }, callback);
+    return this.subscribe('candles', { symbol: '', key: `trade:${timeFrame}:t${pair}` }, callback);
   }
 
   public ping() {
@@ -236,7 +282,7 @@ class BfxApi {
   }
 
   private subscribe(
-    channel: string, pair: string, params: ISubscribeParams, callback: SnapshotCallback,
+    channel: string, params: ISubscribeParams, callback: SnapshotCallback,
   ): Promise<ISubscribeEvent> {
     return new Promise((resolve, reject) => {
       if (typeof callback !== 'function') {
@@ -247,11 +293,14 @@ class BfxApi {
       const heartbeating = ([chanId]: [number]) => this.debug('Heartbeating', {chanId});
 
       this.expectations.once(
-        (msg) => msg.event === 'subscribed' && msg.pair && msg.pair === pair,
+        (msg) => msg.channel === channel && (msg.symbol === params.symbol || msg.key === params.key),
         (e: ISubscribeEvent) => {
-          this.expectations.whenever(MatchSnapshot(e.chanId), (msg) => callback(msg));
-          this.expectations.whenever(MatchHeartbeat(e.chanId), heartbeating);
-          resolve(e);
+          if (e.event === 'subscribed') {
+            this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback, heartbeating));
+            resolve(e);
+          } else {
+            reject(e);
+          }
         },
       );
       this.send({ event: 'subscribe', channel, ...params });
