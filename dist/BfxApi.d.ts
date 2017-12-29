@@ -1,9 +1,6 @@
 /// <reference types="ws" />
 import * as WebSocket from 'ws';
 export declare type SnapshotCallback = (msg: Array<number | string>) => void;
-export declare type wsOnOpen = (this: WebSocket, ev: {
-    target: WebSocket;
-} | Event) => any;
 export interface IBfxApiParameters {
     logger?: Console;
     url?: string;

@@ -25,7 +25,7 @@ function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCa
 
 export type SnapshotCallback = (msg: Array<number|string>) => void;
 
-export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
+// export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
 export interface IBfxApiParameters {
   logger?: Console;
   url?: string;
