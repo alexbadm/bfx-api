@@ -1,23 +1,20 @@
-/// <reference types="ws" />
-import * as WebSocket from 'ws';
 export declare type SnapshotCallback = (msg: Array<number | string>) => void;
-export interface IBfxApiParameters {
+export interface BfxApiParameters {
     logger?: Console;
     url?: string;
-    WebSocket?: typeof WebSocket;
 }
-export interface ISubscribeEvent {
+export interface SubscribeEvent {
     chanId: number;
     channel: string;
     event: string;
     pair?: string;
     symbol?: string;
 }
-export interface IUnsubscribeEvent {
+export interface UnsubscribeEvent {
     chanId: number;
     event: string;
 }
-export interface IAuthEvent {
+export interface AuthEvent {
     event: 'auth';
     status: 'OK' | 'FAIL';
     chanId: 0;
@@ -36,20 +33,19 @@ declare class BfxApi {
     private pingCounter;
     private expectations;
     private ws;
-    private WebSocket;
-    constructor(params?: IBfxApiParameters);
+    constructor(params?: BfxApiParameters);
     connect(): void;
     close(): void;
     auth(apiKey: string, apiSecret: string, callback: SnapshotCallback): Promise<{}>;
-    subscribeTicker(pair: string, callback: SnapshotCallback): Promise<ISubscribeEvent>;
-    subscribeFTicker(pair: string, callback: SnapshotCallback): Promise<ISubscribeEvent>;
-    subscribeTrades(pair: string, callback: SnapshotCallback): Promise<ISubscribeEvent>;
-    subscribeFTrades(pair: string, callback: SnapshotCallback): Promise<ISubscribeEvent>;
-    subscribeBooks(pair: string, callback: SnapshotCallback): Promise<ISubscribeEvent>;
-    subscribeRawBooks(pair: string, callback: SnapshotCallback): Promise<ISubscribeEvent>;
-    subscribeCandles(pair: string, callback: SnapshotCallback, timeFrame?: string): Promise<ISubscribeEvent>;
+    subscribeTicker(pair: string, callback: SnapshotCallback): Promise<SubscribeEvent>;
+    subscribeFTicker(pair: string, callback: SnapshotCallback): Promise<SubscribeEvent>;
+    subscribeTrades(pair: string, callback: SnapshotCallback): Promise<SubscribeEvent>;
+    subscribeFTrades(pair: string, callback: SnapshotCallback): Promise<SubscribeEvent>;
+    subscribeBooks(pair: string, callback: SnapshotCallback): Promise<SubscribeEvent>;
+    subscribeRawBooks(pair: string, callback: SnapshotCallback): Promise<SubscribeEvent>;
+    subscribeCandles(pair: string, callback: SnapshotCallback, timeFrame?: string): Promise<SubscribeEvent>;
     ping(): void;
-    unsubscribe(chanId: number): Promise<IUnsubscribeEvent>;
+    unsubscribe(chanId: number): Promise<UnsubscribeEvent>;
     private handleMessage(rawMsg);
     private processMsgInfo(msg);
     private pause();

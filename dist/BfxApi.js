@@ -15,12 +15,6 @@ var ActionsStack_1 = require("./ActionsStack");
 var Expectations_1 = require("./Expectations");
 var allowedVersions = config.BitfinexAPIVersions;
 var bfxAPI = config.BitfinexDefaultAPIUrl;
-// function MatchHeartbeat(chanId: number): MatchFunc {
-//   return (msg: any[]) => msg[0] === chanId && msg[1] === 'hb';
-// }
-// function MatchSnapshot(chanId: number): MatchFunc {
-//   return (msg: any[]) => msg[0] === chanId && msg[1] !== 'hb';
-// }
 function MatchChannel(chanId) {
     return function (msg) { return msg[0] === chanId; };
 }
@@ -36,7 +30,6 @@ var BfxApi = /** @class */ (function () {
         if (params === void 0) { params = defaultBfxApiParameters; }
         params = __assign({}, defaultBfxApiParameters, params);
         this.url = params.url;
-        this.WebSocket = params.WebSocket || WebSocket;
         this.logger = params.logger;
         this.log = this.logger.log;
         this.debug = this.logger.debug || this.log;
@@ -62,7 +55,7 @@ var BfxApi = /** @class */ (function () {
                 _this.ws.close();
             }
         });
-        this.ws = new this.WebSocket(this.url);
+        this.ws = new WebSocket(this.url);
         this.ws.onmessage = this.handleMessage.bind(this);
         this.ws.onopen = this.resume.bind(this);
     };
@@ -183,7 +176,7 @@ var BfxApi = /** @class */ (function () {
         this.connect();
     };
     BfxApi.prototype.send = function (data) {
-        if (this.paused || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (this.paused || !this.ws || this.ws.readyState !== this.ws.OPEN) {
             this.resumeStack.add(this.send.bind(this, data));
             return;
         }

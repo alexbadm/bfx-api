@@ -1,2 +1,2 @@
-import BfxApi from "./BfxApi";
+import BfxApi from './BfxApi';
 export default BfxApi;

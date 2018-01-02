@@ -7,14 +7,6 @@ import Expectations, { MatchFunc } from './Expectations';
 const allowedVersions = config.BitfinexAPIVersions;
 const bfxAPI = config.BitfinexDefaultAPIUrl;
 
-// function MatchHeartbeat(chanId: number): MatchFunc {
-//   return (msg: any[]) => msg[0] === chanId && msg[1] === 'hb';
-// }
-
-// function MatchSnapshot(chanId: number): MatchFunc {
-//   return (msg: any[]) => msg[0] === chanId && msg[1] !== 'hb';
-// }
-
 function MatchChannel(chanId: number): MatchFunc {
   return (msg: any[]) => msg[0] === chanId;
 }
@@ -26,24 +18,23 @@ function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCa
 export type SnapshotCallback = (msg: Array<number|string>) => void;
 
 // export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
-export interface IBfxApiParameters {
+export interface BfxApiParameters {
   logger?: Console;
   url?: string;
-  WebSocket?: typeof WebSocket;
 }
 
-const defaultBfxApiParameters: IBfxApiParameters = {
+const defaultBfxApiParameters: BfxApiParameters = {
   logger: console,
   url: bfxAPI,
 };
 
 type voidFunction = (...p: any[]) => void;
 
-interface IMsgInfo {
+interface MsgInfo {
   code: number;
 }
 
-export interface ISubscribeEvent {
+export interface SubscribeEvent {
   chanId: number;
   channel: string;
   event: string;
@@ -51,18 +42,18 @@ export interface ISubscribeEvent {
   symbol?: string;
 }
 
-export interface IUnsubscribeEvent {
+export interface UnsubscribeEvent {
   chanId: number;
   event: string;
 }
 
-interface ISubscribeParams {
+interface SubscribeParams {
   symbol: string;
   prec?: string;
   key?: string;
 }
 
-export interface IAuthEvent {
+export interface AuthEvent {
   event: 'auth';
   status: 'OK' | 'FAIL';
   chanId: 0;
@@ -85,12 +76,10 @@ class BfxApi {
 
   private expectations: Expectations;
   private ws: WebSocket;
-  private WebSocket: typeof WebSocket;
 
-  constructor(params: IBfxApiParameters = defaultBfxApiParameters) {
+  constructor(params: BfxApiParameters = defaultBfxApiParameters) {
     params = { ...defaultBfxApiParameters, ...params };
     this.url = params.url;
-    this.WebSocket = params.WebSocket || WebSocket;
     this.logger = params.logger;
 
     this.log = this.logger.log;
@@ -124,7 +113,7 @@ class BfxApi {
       },
     );
 
-    this.ws = new this.WebSocket(this.url);
+    this.ws = new WebSocket(this.url);
     this.ws.onmessage = this.handleMessage.bind(this);
     this.ws.onopen = this.resume.bind(this);
   }
@@ -158,7 +147,7 @@ class BfxApi {
       }
       this.expectations.once(
         (msg) => msg.event === 'auth' && msg.chanId === 0,
-        (event: IAuthEvent) => {
+        (event: AuthEvent) => {
           if (event.status === 'OK') {
             this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback, heartbeating));
             resolve(event);
@@ -212,7 +201,7 @@ class BfxApi {
     const event = 'unsubscribe';
     this.send({ event, chanId });
 
-    return new Promise<IUnsubscribeEvent>((resolve) => {
+    return new Promise<UnsubscribeEvent>((resolve) => {
       this.expectations.once(
         (msg) => msg.event === 'unsubscribed' && msg.chanId === chanId,
         (msg) => resolve(msg),
@@ -235,7 +224,7 @@ class BfxApi {
     this.debug('unprocessed message', msg);
   }
 
-  private processMsgInfo(msg: IMsgInfo) {
+  private processMsgInfo(msg: MsgInfo) {
     this.debug('info message', msg);
 
     switch (msg.code) {
@@ -271,7 +260,7 @@ class BfxApi {
   }
 
   private send(data: object | string) {
-    if (this.paused || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (this.paused || !this.ws || this.ws.readyState !== this.ws.OPEN) {
       this.resumeStack.add(this.send.bind(this, data));
       return;
     }
@@ -282,8 +271,8 @@ class BfxApi {
   }
 
   private subscribe(
-    channel: string, params: ISubscribeParams, callback: SnapshotCallback,
-  ): Promise<ISubscribeEvent> {
+    channel: string, params: SubscribeParams, callback: SnapshotCallback,
+  ): Promise<SubscribeEvent> {
     return new Promise((resolve, reject) => {
       if (typeof callback !== 'function') {
         reject(new TypeError('BfxApi.subscribe error: callback must be a function'));
@@ -294,7 +283,7 @@ class BfxApi {
 
       this.expectations.once(
         (msg) => msg.channel === channel && (msg.symbol === params.symbol || msg.key === params.key),
-        (e: ISubscribeEvent) => {
+        (e: SubscribeEvent) => {
           if (e.event === 'subscribed') {
             this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback, heartbeating));
             resolve(e);
