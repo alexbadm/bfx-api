@@ -1,5 +1,5 @@
 import * as crypto from 'crypto-js';
-import * as WebSocket from 'ws';
+import * as WS from 'ws';
 import * as config from '../config.json';
 import ActionsStack from './ActionsStack';
 import Expectations, { MatchFunc } from './Expectations';
@@ -17,7 +17,7 @@ function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCa
 
 export type SnapshotCallback = (msg: Array<number|string>) => void;
 
-// export type wsOnOpen = (this: WebSocket, ev: { target: WebSocket } | Event) => any;
+// export type wsOnOpen = (this: WS, ev: { target: WS } | Event) => any;
 export interface BfxApiParameters {
   logger?: Console;
   url?: string;
@@ -75,7 +75,7 @@ class BfxApi {
   private pingCounter: number;
 
   private expectations: Expectations;
-  private ws: WebSocket;
+  private ws: WS | WebSocket;
 
   constructor(params: BfxApiParameters = defaultBfxApiParameters) {
     params = { ...defaultBfxApiParameters, ...params };
@@ -113,7 +113,7 @@ class BfxApi {
       },
     );
 
-    this.ws = new WebSocket(this.url);
+    this.ws = (typeof global === 'object') ? new WS(this.url) : new WebSocket(this.url);
     this.ws.onmessage = this.handleMessage.bind(this);
     this.ws.onopen = this.resume.bind(this);
   }

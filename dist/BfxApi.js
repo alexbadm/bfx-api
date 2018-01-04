@@ -9,7 +9,7 @@ var __assign = (this && this.__assign) || Object.assign || function(t) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var crypto = require("crypto-js");
-var WebSocket = require("ws");
+var WS = require("ws");
 var config = require("../config.json");
 var ActionsStack_1 = require("./ActionsStack");
 var Expectations_1 = require("./Expectations");
@@ -55,7 +55,7 @@ var BfxApi = /** @class */ (function () {
                 _this.ws.close();
             }
         });
-        this.ws = new WebSocket(this.url);
+        this.ws = (typeof global === 'object') ? new WS(this.url) : new WebSocket(this.url);
         this.ws.onmessage = this.handleMessage.bind(this);
         this.ws.onopen = this.resume.bind(this);
     };
