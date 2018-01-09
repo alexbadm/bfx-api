@@ -22,12 +22,28 @@ export interface AuthEvent {
     caps: string;
     code: number;
 }
+export interface OrderRequest {
+    gid?: number;
+    cid?: number;
+    type: string;
+    symbol: string;
+    amount: string;
+    price?: string;
+    price_trailing?: number;
+    price_aux_limit?: number;
+    hidden?: number;
+    postonly?: number;
+}
+export declare type NotifyOnReq = [number, number | null, number, string, number | null, number | null, number, number, string, string | null, null, null, null, null, null, null, number, number | null, number | null, number | null, null, null, null, number | null, number | null, number | null];
+export declare type NotificationBody = [number, string, number | null, null, NotifyOnReq, number | null, string, string];
+export declare type Notification = [number, 'n', NotificationBody];
 declare class BfxApi {
     private url;
     private log;
     private debug;
     private error;
     private logger;
+    private authorized;
     private paused;
     private resumeStack;
     private pingCounter;
@@ -46,6 +62,8 @@ declare class BfxApi {
     subscribeCandles(pair: string, callback: SnapshotCallback, timeFrame?: string): Promise<SubscribeEvent>;
     ping(): void;
     unsubscribe(chanId: number): Promise<UnsubscribeEvent>;
+    newOrder(order: OrderRequest): Promise<NotificationBody>;
+    newOrders(orders: OrderRequest[]): Promise<NotificationBody[]>;
     private handleMessage(rawMsg);
     private processMsgInfo(msg);
     private pause();

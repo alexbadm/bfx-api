@@ -34,8 +34,9 @@ var BfxApi = /** @class */ (function () {
         this.url = params.url;
         this.logger = params.logger;
         this.log = this.logger.log;
-        this.debug = this.logger.debug || this.log;
+        this.debug = this.log; // this.logger.debug || this.log;
         this.error = this.logger.error || this.log;
+        this.authorized = false;
         this.paused = true;
         this.resumeStack = new ActionsStack_1.default();
         this.pingCounter = 0;
@@ -50,11 +51,10 @@ var BfxApi = /** @class */ (function () {
         var _this = this;
         this.debug('connect');
         this.expectations.once(function (msg) { return msg.event === 'info' && msg.version; }, function (msg) {
-            _this.debug('msg.version', msg.version);
+            _this.debug('api version', msg.version);
             if (allowedVersions.indexOf(msg.version) === -1) {
                 _this.error('unexpected version', msg.version);
-                _this.error('closing socket');
-                _this.ws.close();
+                _this.close();
             }
         });
         this.ws = (typeof global === 'object') ? new WS(this.url) : new WebSocket(this.url);
@@ -87,7 +87,8 @@ var BfxApi = /** @class */ (function () {
             }
             _this.expectations.once(function (msg) { return msg.event === 'auth' && msg.chanId === 0; }, function (event) {
                 if (event.status === 'OK') {
-                    _this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback));
+                    _this.expectations.observe(MatchChannel(0), SnapshotAndHeartbeatCallback(callback));
+                    _this.authorized = true;
                     resolve(event);
                 }
                 else {
@@ -134,6 +135,59 @@ var BfxApi = /** @class */ (function () {
         this.send({ event: event, chanId: chanId });
         return new Promise(function (resolve) {
             _this.expectations.once(function (msg) { return msg.event === 'unsubscribed' && msg.chanId === chanId; }, function (msg) { return resolve(msg); });
+        });
+    };
+    BfxApi.prototype.newOrder = function (order) {
+        var _this = this;
+        return new Promise(function (resolve, reject) {
+            if (!_this.authorized) {
+                reject(new Error('User is not authorized on the exchange'));
+                return;
+            }
+            var cid = Date.now();
+            _this.expectations.once(function (msg) { return msg[0] === 0 && msg[1] === 'n' && msg[2][1] === 'on-req' && msg[2][4][2] === cid; }, function (msg) { return msg[2][6] === 'SUCCESS' ? resolve(msg[2]) : reject(msg[2]); });
+            var payload = __assign({ 
+                // gid: 1,
+                // amount: '1.0',
+                cid: cid, hidden: 0, 
+                // price: '500',
+                // symbol: 'tBTCUSD',
+                type: 'EXCHANGE MARKET' }, order);
+            _this.send([0, 'on', null, payload]);
+        });
+    };
+    BfxApi.prototype.newOrders = function (orders) {
+        var _this = this;
+        return new Promise(function (resolve, reject) {
+            if (!_this.authorized) {
+                reject(new Error('User is not authorized on the exchange'));
+                return;
+            }
+            if (!orders || !orders.length) {
+                reject(new Error('No operations given'));
+                return;
+            }
+            if (orders.length > 15) {
+                reject(new Error('Submiting more than 15 operations is not allowed'));
+                return;
+            }
+            var cid = Date.now();
+            var responses = Array(orders.length);
+            var responseCounter = 0;
+            var payload = orders.map(function (order, idx) {
+                var orderCid = cid + idx;
+                _this.expectations.once(function (msg) { return msg[0] === 0 && msg[1] === 'n' && msg[2][1] === 'on-req' && msg[2][4][2] === orderCid; }, function (msg) {
+                    responses[idx] = msg[2];
+                    responseCounter++;
+                    if (responseCounter === orders.length) {
+                        responses.every(function (resp) { return resp[6] === 'SUCCESS'; })
+                            ? resolve(responses)
+                            : reject(responses);
+                    }
+                });
+                return ['on', __assign({ cid: orderCid, hidden: 0 }, order)];
+            });
+            _this.send([0, 'ox_multi', null, payload]);
         });
     };
     BfxApi.prototype.handleMessage = function (rawMsg) {

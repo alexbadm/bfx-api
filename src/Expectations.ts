@@ -7,12 +7,18 @@ class Expectation {
 
 // tslint:disable-next-line:max-classes-per-file
 class Expectations {
+  private expectationsObserve: Expectation[];
   private expectationsOnce: Expectation[];
   private expectationsWhenever: Expectation[];
 
   constructor() {
+    this.expectationsObserve = [];
     this.expectationsOnce = [];
     this.expectationsWhenever = [];
+  }
+
+  public observe(match: MatchFunc, process: ProcessFunc) {
+    this.expectationsObserve.push(new Expectation(match, process));
   }
 
   public once(match: MatchFunc, process: ProcessFunc) {
@@ -24,10 +30,18 @@ class Expectations {
   }
 
   public exec(msg: any) {
-    return this.execOne(msg) || this.execWhenever(msg);
+    return this.execOnce(msg) || this.execWhenever(msg) || this.execObserve(msg);
   }
 
-  public execOne(msg: any) {
+  private execObserve(msg: any) {
+    const expIdx = this.expectationsObserve.findIndex((exp) => exp.match(msg));
+    if (~expIdx) {
+      this.expectationsObserve[expIdx].process(msg);
+    }
+    return false;
+  }
+
+  private execOnce(msg: any) {
     const expectation = this.expectationsOnce.find((exp) => exp.match(msg));
     if (!expectation) {
       return false;
@@ -38,7 +52,7 @@ class Expectations {
     return true;
   }
 
-  public execWhenever(msg: any) {
+  private execWhenever(msg: any) {
     const expIdx = this.expectationsWhenever.findIndex((exp) => exp.match(msg));
     if (!~expIdx) {
       return false;

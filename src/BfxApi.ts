@@ -19,7 +19,6 @@ function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCa
 
 export type SnapshotCallback = (msg: Array<number|string>) => void;
 
-// export type wsOnOpen = (this: WS, ev: { target: WS } | Event) => any;
 export interface BfxApiParameters {
   logger?: Console;
   url?: string;
@@ -64,6 +63,66 @@ export interface AuthEvent {
   code: number;
 }
 
+export interface OrderRequest {
+  gid?: number; // int32	(optional) Group id for the order
+  cid?: number; // int45	Must be unique in the day (UTC)
+  type: string; // MARKET, EXCHANGE MARKET, LIMIT, EXCHANGE LIMIT, STOP, EXCHANGE STOP,
+  // TRAILING STOP, EXCHANGE TRAILING STOP, FOK, EXCHANGE FOK, STOP LIMIT, EXCHANGE STOP LIMIT
+  symbol: string; // symbol (tBTCUSD, tETHUSD, ...)
+  amount: string; // decimal string	Positive for buy, Negative for sell
+  price?: string; // decimal string	Price (Not required for market orders)
+  price_trailing?: number; // decimal	The trailing price
+  price_aux_limit?: number; // decimal	Auxiliary Limit price (for STOP LIMIT)
+  hidden?: number; // int2	Whether the order is hidden (1) or not (0)
+  postonly?: number; // int2	(optional) Whether the order is postonly (1) or not (0)
+}
+
+export type NotifyOnReq = [
+  number, // ID,
+  number | null, // GID,
+  number, // CID,
+  string, // SYMBOL,
+  number | null, // MTS_CREATE,
+  number | null, // MTS_UPDATE,
+  number, // AMOUNT,
+  number, // AMOUNT_ORIG,
+  string, // TYPE,
+  string | null, // TYPE_PREV,
+  null, // _PLACEHOLDER,
+  null, // _PLACEHOLDER,
+  null, // FLAGS,
+  null, // STATUS,
+  null, // _PLACEHOLDER,
+  null, // _PLACEHOLDER,
+  number, // PRICE,
+  number | null, // PRICE_AVG,
+  number | null, // PRICE_TRAILING,
+  number | null, // PRICE_AUX_LIMIT,
+  null, // _PLACEHOLDER,
+  null, // _PLACEHOLDER,
+  null, // _PLACEHOLDER,
+  number | null, // NOTIFY,
+  number | null, // HIDDEN,
+  number | null // PLACED_ID,
+];
+
+export type NotificationBody = [
+  number, // MTS,
+  string, // TYPE,
+  number | null, // MESSAGE_ID,
+  null,
+  NotifyOnReq, // NOTIFY_INFO, // TODO: here may be another types
+  number | null, // CODE,
+  string, // STATUS,
+  string // TEXT,
+];
+
+export type Notification = [
+  number, // CHAN_ID
+  'n',
+  NotificationBody
+];
+
 class BfxApi {
   private url: string;
 
@@ -72,6 +131,7 @@ class BfxApi {
   private error: voidFunction;
   private logger: Console;
 
+  private authorized: boolean;
   private paused: boolean;
   private resumeStack: ActionsStack;
   private pingCounter: number;
@@ -85,9 +145,10 @@ class BfxApi {
     this.logger = params.logger;
 
     this.log = this.logger.log;
-    this.debug = this.logger.debug || this.log;
+    this.debug = this.log; // this.logger.debug || this.log;
     this.error = this.logger.error || this.log;
 
+    this.authorized = false;
     this.paused = true;
     this.resumeStack = new ActionsStack();
     this.pingCounter = 0;
@@ -106,11 +167,10 @@ class BfxApi {
     this.expectations.once(
       (msg) => msg.event === 'info' && msg.version,
       (msg) => {
-        this.debug('msg.version', msg.version);
+        this.debug('api version', msg.version);
         if (allowedVersions.indexOf(msg.version) === -1) {
           this.error('unexpected version', msg.version);
-          this.error('closing socket');
-          this.ws.close();
+          this.close();
         }
       },
     );
@@ -151,7 +211,8 @@ class BfxApi {
         (msg) => msg.event === 'auth' && msg.chanId === 0,
         (event: AuthEvent) => {
           if (event.status === 'OK') {
-            this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback));
+            this.expectations.observe(MatchChannel(0), SnapshotAndHeartbeatCallback(callback));
+            this.authorized = true;
             resolve(event);
           } else {
             reject(event);
@@ -208,6 +269,77 @@ class BfxApi {
         (msg) => msg.event === 'unsubscribed' && msg.chanId === chanId,
         (msg) => resolve(msg),
       );
+    });
+  }
+
+  public newOrder(order: OrderRequest): Promise<NotificationBody> {
+    return new Promise((resolve, reject) => {
+      if (!this.authorized) {
+        reject(new Error('User is not authorized on the exchange'));
+        return;
+      }
+
+      const cid = Date.now();
+
+      this.expectations.once(
+        (msg) => msg[0] === 0 && msg[1] === 'n' && msg[2][1] === 'on-req' && msg[2][4][2] === cid,
+        (msg: Notification) => msg[2][6] === 'SUCCESS' ? resolve(msg[2]) : reject(msg[2]),
+      );
+
+      const payload = {
+        // gid: 1,
+        // amount: '1.0',
+        cid,
+        hidden: 0,
+        // price: '500',
+        // symbol: 'tBTCUSD',
+        type: 'EXCHANGE MARKET',
+        ...order,
+      };
+
+      this.send([ 0, 'on', null, payload ]);
+    });
+  }
+
+  public newOrders(orders: OrderRequest[]): Promise<NotificationBody[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.authorized) {
+        reject(new Error('User is not authorized on the exchange'));
+        return;
+      }
+
+      if (!orders || !orders.length) {
+        reject(new Error('No operations given'));
+        return;
+      }
+
+      if (orders.length > 15) {
+        reject(new Error('Submiting more than 15 operations is not allowed'));
+        return;
+      }
+
+      const cid = Date.now();
+      const responses: NotificationBody[] = Array(orders.length);
+      let responseCounter = 0;
+
+      const payload = orders.map((order, idx) => {
+        const orderCid = cid + idx;
+        this.expectations.once(
+          (msg) => msg[0] === 0 && msg[1] === 'n' && msg[2][1] === 'on-req' && msg[2][4][2] === orderCid,
+          (msg: Notification) => {
+            responses[idx] = msg[2];
+            responseCounter++;
+            if (responseCounter === orders.length) {
+              responses.every((resp) => resp[6] === 'SUCCESS')
+                ? resolve(responses)
+                : reject(responses);
+            }
+          },
+        );
+        return [ 'on', { cid: orderCid, hidden: 0, ...order } ];
+      });
+
+      this.send([ 0, 'ox_multi', null, payload ]);
     });
   }
 
