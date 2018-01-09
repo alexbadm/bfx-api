@@ -11,7 +11,9 @@ function MatchChannel(chanId: number): MatchFunc {
   return (msg: any[]) => msg[0] === chanId;
 }
 
-function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCallback) {
+function heartbeatCb() { return; }
+
+function SnapshotAndHeartbeatCallback(snapCb: SnapshotCallback, hbCb: SnapshotCallback = heartbeatCb) {
   return (msg: any[]) => msg[1] === 'hb' ? hbCb(msg) : snapCb(msg);
 }
 
@@ -138,7 +140,7 @@ class BfxApi {
       event: 'auth',
     };
 
-    const heartbeating = () => this.debug('Heartbeating auth channel');
+    // const heartbeating = () => this.debug('Heartbeating auth channel');
 
     return new Promise((resolve, reject) => {
       if (typeof callback !== 'function') {
@@ -149,7 +151,7 @@ class BfxApi {
         (msg) => msg.event === 'auth' && msg.chanId === 0,
         (event: AuthEvent) => {
           if (event.status === 'OK') {
-            this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback, heartbeating));
+            this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback));
             resolve(event);
           } else {
             reject(event);
@@ -279,13 +281,13 @@ class BfxApi {
         return;
       }
 
-      const heartbeating = ([chanId]: [number]) => this.debug('Heartbeating', {chanId});
+      // const heartbeating = ([chanId]: [number]) => this.debug('Heartbeating', {chanId});
 
       this.expectations.once(
         (msg) => msg.channel === channel && (msg.symbol === params.symbol || msg.key === params.key),
         (e: SubscribeEvent) => {
           if (e.event === 'subscribed') {
-            this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback, heartbeating));
+            this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback));
             resolve(e);
           } else {
             reject(e);

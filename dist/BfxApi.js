@@ -21,6 +21,7 @@ function MatchChannel(chanId) {
 function SnapshotAndHeartbeatCallback(snapCb, hbCb) {
     return function (msg) { return msg[1] === 'hb' ? hbCb(msg) : snapCb(msg); };
 }
+function heartbeatCb() { return; }
 var defaultBfxApiParameters = {
     logger: console,
     url: bfxAPI,
@@ -77,7 +78,7 @@ var BfxApi = /** @class */ (function () {
             authSig: authSig,
             event: 'auth',
         };
-        var heartbeating = function () { return _this.debug('Heartbeating auth channel'); };
+        // const heartbeating = () => this.debug('Heartbeating auth channel');
         return new Promise(function (resolve, reject) {
             if (typeof callback !== 'function') {
                 reject(new TypeError('BfxApi.auth error: callback must be a function'));
@@ -85,7 +86,7 @@ var BfxApi = /** @class */ (function () {
             }
             _this.expectations.once(function (msg) { return msg.event === 'auth' && msg.chanId === 0; }, function (event) {
                 if (event.status === 'OK') {
-                    _this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback, heartbeating));
+                    _this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback, heartbeatCb));
                     resolve(event);
                 }
                 else {
@@ -192,13 +193,10 @@ var BfxApi = /** @class */ (function () {
                 reject(new TypeError('BfxApi.subscribe error: callback must be a function'));
                 return;
             }
-            var heartbeating = function (_a) {
-                var chanId = _a[0];
-                return _this.debug('Heartbeating', { chanId: chanId });
-            };
+            // const heartbeating = ([chanId]: [number]) => this.debug('Heartbeating', {chanId});
             _this.expectations.once(function (msg) { return msg.channel === channel && (msg.symbol === params.symbol || msg.key === params.key); }, function (e) {
                 if (e.event === 'subscribed') {
-                    _this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback, heartbeating));
+                    _this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback, heartbeatCb));
                     resolve(e);
                 }
                 else {
