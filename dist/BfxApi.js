@@ -18,10 +18,11 @@ var bfxAPI = config.BitfinexDefaultAPIUrl;
 function MatchChannel(chanId) {
     return function (msg) { return msg[0] === chanId; };
 }
+function heartbeatCb() { return; }
 function SnapshotAndHeartbeatCallback(snapCb, hbCb) {
+    if (hbCb === void 0) { hbCb = heartbeatCb; }
     return function (msg) { return msg[1] === 'hb' ? hbCb(msg) : snapCb(msg); };
 }
-function heartbeatCb() { return; }
 var defaultBfxApiParameters = {
     logger: console,
     url: bfxAPI,
@@ -86,7 +87,7 @@ var BfxApi = /** @class */ (function () {
             }
             _this.expectations.once(function (msg) { return msg.event === 'auth' && msg.chanId === 0; }, function (event) {
                 if (event.status === 'OK') {
-                    _this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback, heartbeatCb));
+                    _this.expectations.whenever(MatchChannel(0), SnapshotAndHeartbeatCallback(callback));
                     resolve(event);
                 }
                 else {
@@ -196,7 +197,7 @@ var BfxApi = /** @class */ (function () {
             // const heartbeating = ([chanId]: [number]) => this.debug('Heartbeating', {chanId});
             _this.expectations.once(function (msg) { return msg.channel === channel && (msg.symbol === params.symbol || msg.key === params.key); }, function (e) {
                 if (e.event === 'subscribed') {
-                    _this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback, heartbeatCb));
+                    _this.expectations.whenever(MatchChannel(e.chanId), SnapshotAndHeartbeatCallback(callback));
                     resolve(e);
                 }
                 else {
