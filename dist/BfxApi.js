@@ -13,6 +13,7 @@ var WS = require("ws");
 var config = require("../config.json");
 var ActionsStack_1 = require("./ActionsStack");
 var Expectations_1 = require("./Expectations");
+var timers_1 = require("timers");
 var allowedVersions = config.BitfinexAPIVersions;
 var bfxAPI = config.BitfinexDefaultAPIUrl;
 function MatchChannel(chanId) {
@@ -235,7 +236,9 @@ var BfxApi = /** @class */ (function () {
         this.debug('info message', msg);
         switch (msg.code) {
             case 20051:
-                this.restart();
+                this.close();
+                timers_1.setTimeout(this.connect, 5000);
+                // this.restart();
                 break;
             case 20060:
                 this.pause();

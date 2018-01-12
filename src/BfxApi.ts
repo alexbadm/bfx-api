@@ -10,6 +10,7 @@ import {
   UnsubscribeEvent,
 } from './bitfinexTypes';
 import Expectations, { MatchFunc } from './Expectations';
+import { setTimeout } from 'timers';
 
 const allowedVersions = config.BitfinexAPIVersions;
 const bfxAPI = config.BitfinexDefaultAPIUrl;
@@ -328,7 +329,9 @@ class BfxApi {
 
     switch (msg.code) {
       case 20051:
-        this.restart();
+        this.close();
+        setTimeout(this.connect, 5000);
+        // this.restart();
         break;
       case 20060:
         this.pause();
