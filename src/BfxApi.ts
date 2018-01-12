@@ -2,6 +2,13 @@ import * as crypto from 'crypto-js';
 import * as WS from 'ws';
 import * as config from '../config.json';
 import ActionsStack from './ActionsStack';
+import {
+  AuthEvent,
+  NotificationBody,
+  OrderRequest,
+  SubscribeEvent,
+  UnsubscribeEvent,
+} from './bitfinexTypes';
 import Expectations, { MatchFunc } from './Expectations';
 
 const allowedVersions = config.BitfinexAPIVersions;
@@ -35,93 +42,11 @@ interface MsgInfo {
   code: number;
 }
 
-export interface SubscribeEvent {
-  chanId: number;
-  channel: string;
-  event: string;
-  pair?: string;
-  symbol?: string;
-}
-
-export interface UnsubscribeEvent {
-  chanId: number;
-  event: string;
-}
-
 interface SubscribeParams {
   symbol: string;
   prec?: string;
   key?: string;
 }
-
-export interface AuthEvent {
-  event: 'auth';
-  status: 'OK' | 'FAIL';
-  chanId: 0;
-  userId: number;
-  caps: string;
-  code: number;
-}
-
-export interface OrderRequest {
-  gid?: number; // int32	(optional) Group id for the order
-  cid?: number; // int45	Must be unique in the day (UTC)
-  type: string; // MARKET, EXCHANGE MARKET, LIMIT, EXCHANGE LIMIT, STOP, EXCHANGE STOP,
-  // TRAILING STOP, EXCHANGE TRAILING STOP, FOK, EXCHANGE FOK, STOP LIMIT, EXCHANGE STOP LIMIT
-  symbol: string; // symbol (tBTCUSD, tETHUSD, ...)
-  amount: string; // decimal string	Positive for buy, Negative for sell
-  price?: string; // decimal string	Price (Not required for market orders)
-  price_trailing?: number; // decimal	The trailing price
-  price_aux_limit?: number; // decimal	Auxiliary Limit price (for STOP LIMIT)
-  hidden?: number; // int2	Whether the order is hidden (1) or not (0)
-  postonly?: number; // int2	(optional) Whether the order is postonly (1) or not (0)
-}
-
-export type NotifyOnReq = [
-  number, // ID,
-  number | null, // GID,
-  number, // CID,
-  string, // SYMBOL,
-  number | null, // MTS_CREATE,
-  number | null, // MTS_UPDATE,
-  number, // AMOUNT,
-  number, // AMOUNT_ORIG,
-  string, // TYPE,
-  string | null, // TYPE_PREV,
-  null, // _PLACEHOLDER,
-  null, // _PLACEHOLDER,
-  null, // FLAGS,
-  null, // STATUS,
-  null, // _PLACEHOLDER,
-  null, // _PLACEHOLDER,
-  number, // PRICE,
-  number | null, // PRICE_AVG,
-  number | null, // PRICE_TRAILING,
-  number | null, // PRICE_AUX_LIMIT,
-  null, // _PLACEHOLDER,
-  null, // _PLACEHOLDER,
-  null, // _PLACEHOLDER,
-  number | null, // NOTIFY,
-  number | null, // HIDDEN,
-  number | null // PLACED_ID,
-];
-
-export type NotificationBody = [
-  number, // MTS,
-  string, // TYPE,
-  number | null, // MESSAGE_ID,
-  null,
-  NotifyOnReq, // NOTIFY_INFO, // TODO: here may be another types
-  number | null, // CODE,
-  string, // STATUS,
-  string // TEXT,
-];
-
-export type Notification = [
-  number, // CHAN_ID
-  'n',
-  NotificationBody
-];
 
 class BfxApi {
   private url: string;
@@ -341,6 +266,46 @@ class BfxApi {
 
       this.send([ 0, 'ox_multi', null, payload ]);
     });
+  }
+
+  public trades(orders: OrderRequest[]): Promise<any[]> {
+    if (!this.authorized) {
+      return Promise.reject(new Error('User is not authorized on the exchange'));
+    }
+
+    if (!orders || !orders.length) {
+      return Promise.reject(new Error('No operations given'));
+    }
+
+    if (orders.length > 15) {
+      return Promise.reject(new Error('Submiting more than 15 operations is not allowed'));
+    }
+
+    const cid = Date.now();
+
+    const payload: Array<['on', OrderRequest]> = [];
+    const promises = orders.map((order, idx) => new Promise((resolve, reject) => {
+      const orderCid = cid + idx;
+      this.expectations.once(
+        (msg) => msg[0] === 0 && msg[1] === 'n' && msg[2][1] === 'on-req' && msg[2][4][2] === orderCid,
+        (msg: Notification) => {
+          const notif = msg[2];
+          if (notif[6] === 'SUCCESS') {
+            const orderId = notif[4][0];
+            this.expectations.once(
+              (trdMsg) => trdMsg[0] === 0 && trdMsg[1] === 'tu' && trdMsg[2][3] === orderId,
+              (trdMsg) => resolve(trdMsg),
+            );
+          } else {
+            reject(notif);
+          }
+        },
+      );
+      payload.push([ 'on', { cid: orderCid, hidden: 0, ...order } ]);
+    }));
+
+    this.send([ 0, 'ox_multi', null, payload ]);
+    return Promise.all(promises);
   }
 
   private handleMessage(rawMsg: MessageEvent) {

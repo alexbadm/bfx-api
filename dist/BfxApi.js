@@ -190,6 +190,36 @@ var BfxApi = /** @class */ (function () {
             _this.send([0, 'ox_multi', null, payload]);
         });
     };
+    BfxApi.prototype.trades = function (orders) {
+        var _this = this;
+        if (!this.authorized) {
+            return Promise.reject(new Error('User is not authorized on the exchange'));
+        }
+        if (!orders || !orders.length) {
+            return Promise.reject(new Error('No operations given'));
+        }
+        if (orders.length > 15) {
+            return Promise.reject(new Error('Submiting more than 15 operations is not allowed'));
+        }
+        var cid = Date.now();
+        var payload = [];
+        var promises = orders.map(function (order, idx) { return new Promise(function (resolve, reject) {
+            var orderCid = cid + idx;
+            _this.expectations.once(function (msg) { return msg[0] === 0 && msg[1] === 'n' && msg[2][1] === 'on-req' && msg[2][4][2] === orderCid; }, function (msg) {
+                var notif = msg[2];
+                if (notif[6] === 'SUCCESS') {
+                    var orderId_1 = notif[4][0];
+                    _this.expectations.once(function (trdMsg) { return trdMsg[0] === 0 && trdMsg[1] === 'tu' && trdMsg[2][3] === orderId_1; }, function (trdMsg) { return resolve(trdMsg); });
+                }
+                else {
+                    reject(notif);
+                }
+            });
+            payload.push(['on', __assign({ cid: orderCid, hidden: 0 }, order)]);
+        }); });
+        this.send([0, 'ox_multi', null, payload]);
+        return Promise.all(promises);
+    };
     BfxApi.prototype.handleMessage = function (rawMsg) {
         var msg = JSON.parse(rawMsg.data);
         if (this.expectations.exec(msg)) {
